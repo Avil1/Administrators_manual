@@ -758,7 +758,7 @@ rm -rf $TEST_DIR
 
 | Версия | Дата | Описание изменений | Автор |
 |--------|------|-------------------|-------|
-| 1.0 | 12.09.2026 | Первоначальная версия | [ФИО] |
+| 1.0 | 12.09.2026 | Первоначальная версия | AviHID |
 | | | | |
 
 ---
@@ -767,11 +767,57 @@ rm -rf $TEST_DIR
 
 *Рисунок 1 — Схема развертывания системы*
 
-[Место для схемы размещения серверов и сетевой инфраструктуры]
+```mermaid
+graph LR
+    A[Пользователь] -->|HTTPS| B[Nginx<br/>:443/:80]
+    B -->|proxy_pass| C[Приложение<br/>:8080]
+    C --> D[(PostgreSQL<br/>:5432)]
+    C --> E[(Redis<br/>:6379)]
+    C --> F[Файловое<br/>хранилище]
+    G[Prometheus] -.->|мониторинг| C
+    G -.->|мониторинг| D
 
 *Рисунок 2 — Диаграмма процессов резервного копирования*
 
-[Место для диаграммы последовательности операций резервного копирования]
+```mermaid
+sequenceDiagram
+    participant Cron as Планировщик (Cron)
+    participant Script as Скрипт резервного копирования
+    participant DB as PostgreSQL
+    participant FS as Файловая система
+    participant Storage as Хранилище бэкапов
+
+    Cron->>Script: Запуск по расписанию (02:00 / каждые 6ч)
+    activate Script
+    
+    Script->>DB: pg_dump (создание дампа)
+    activate DB
+    DB-->>Script: Дамп базы данных
+    deactivate DB
+    
+    Script->>Script: Сжатие gzip
+    Note over Script: Формат: db_backup_YYYYMMDD_HHMMSS.dump.gz
+    
+    Script->>Storage: Сохранение в хранилище
+    Storage-->>Script: Подтверждение записи
+    
+    Script->>FS: tar -czf (архивирование файлов)
+    activate FS
+    FS-->>Script: Архив files_backup_*.tar.gz
+    deactivate FS
+    
+    Script->>Storage: Сохранение архива файлов
+    Storage-->>Script: Подтверждение записи
+    
+    Script->>Script: Удаление старых бэкапов
+    Note over Script: БД: старше 30 дней<br/>Файлы: старше 90 дней
+    
+    Script->>Script: Запись в лог
+    Note over Script: /var/log/system/backup.log
+    
+    deactivate Script
+    Script-->>Cron: Завершение операции
+```
 
 ---
 
